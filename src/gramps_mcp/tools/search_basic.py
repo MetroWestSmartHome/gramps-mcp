@@ -414,27 +414,23 @@ async def find_anything_tool(client, arguments) -> List[TextContent]:
     """
     try:
         from pydantic import BaseModel
-        from ..models.parameters.simple_params import SimpleSearchParams
 
-        # Handle SimpleSearchParams (from FastMCP) or dict (from stdio)
-        if isinstance(arguments, SimpleSearchParams):
-            # Convert SimpleSearchParams to SearchParams
-            params = SearchParams(
-                query=arguments.query,
-                pagesize=arguments.max_results
-            )
-        elif isinstance(arguments, BaseModel):
-            # Other BaseModel - try to extract query
-            params = SearchParams(
-                query=getattr(arguments, "query", ""),
-                pagesize=getattr(arguments, "max_results", 20)
-            )
+        # Normalize arguments to a plain dict regardless of transport type.
+        # Reason: The MCP SDK may pass a Pydantic model or a raw dict depending
+        # on the transport (FastMCP vs stdio). Using model_dump() on any BaseModel
+        # avoids fragile isinstance chains that break when the model is reconstructed
+        # under a different import path or SDK version.
+        if isinstance(arguments, BaseModel):
+            data = arguments.model_dump()
+        elif isinstance(arguments, dict):
+            data = arguments
         else:
-            # Dict from stdio transport
-            params = SearchParams(
-                query=arguments.get("query", ""),
-                pagesize=arguments.get("max_results", 20)
-            )
+            data = {}
+
+        params = SearchParams(
+            query=data.get("query", ""),
+            pagesize=data.get("max_results", 20)
+        )
 
         # Get tree_id from settings
         settings = get_settings()
